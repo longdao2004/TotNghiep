@@ -1,3 +1,4 @@
+// core
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -19,33 +20,32 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: ColorScheme.light(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
         primary: AppColors.primary,
         onPrimary: Colors.white,
         secondary: AppColors.primaryDark,
         surface: AppColors.surface,
         background: AppColors.background,
         error: AppColors.error,
+        outline: AppColors.border,
       ),
+      // Cấu hình Font chữ toàn cục (Inter)
       textTheme: GoogleFonts.interTextTheme().copyWith(
-        displayLarge: GoogleFonts.inter(color: AppColors.textPrimary),
         bodyLarge: GoogleFonts.inter(color: AppColors.textPrimary),
         bodyMedium: GoogleFonts.inter(color: AppColors.textSecondary),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(color: AppColors.textPrimary),
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.inter(
           color: AppColors.textPrimary,
           fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: AppColors.border,
-        thickness: 1,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
     );
   }
