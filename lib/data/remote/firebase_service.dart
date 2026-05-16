@@ -8,29 +8,29 @@ class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  // References to collections
+  // Collection references
   CollectionReference get _devicesRef => _firestore.collection('devices');
   CollectionReference get _historyRef => _firestore.collection('repair_histories');
 
   // --- STORAGE METHODS ---
 
-  /// Tải ảnh lên Firebase Storage và trả về URL
+  /// Tải ảnh lên Firebase Storage và trả về URL để lưu vào Firestore
   Future<String?> uploadImage(File imageFile) async {
     try {
-      // Tạo tên file duy nhất dựa trên thời gian
+      // Tạo tên file duy nhất dựa trên timestamp
       String fileName = 'device_${DateTime.now().millisecondsSinceEpoch}.jpg';
       
-      // Tham chiếu đến thư mục 'device_images'
+      // Tham chiếu đến thư mục 'device_images' trên Storage
       Reference ref = _storage.ref().child('device_images').child(fileName);
       
-      // Bắt đầu upload
+      // Thực hiện upload
       UploadTask uploadTask = ref.putFile(imageFile);
       TaskSnapshot snapshot = await uploadTask;
       
-      // Lấy và trả về URL sau khi upload xong
+      // Lấy URL sau khi tải lên thành công
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
-      print('Lỗi khi upload ảnh: $e');
+      print('Lỗi upload ảnh: $e');
       return null;
     }
   }
@@ -41,7 +41,6 @@ class FirebaseService {
   Stream<List<Device>> getDevicesStream() {
     return _devicesRef.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
-        // Truyền đầy đủ 2 tham số: dữ liệu map và document ID
         return Device.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }).toList();
     });
@@ -59,9 +58,22 @@ class FirebaseService {
     }
   }
 
-  /// Xóa thiết bị
-  Future<void> deleteDevice(String id) async {
-    await _devicesRef.doc(id).delete();
+  /// Xóa thiết bị (Xóa Firestore document và ảnh trên Storage nếu có)
+  Future<void> deleteDevice(String deviceId, String? imageUrl) async {
+    try {
+      // 1. Xóa ảnh trên Storage nếu tồn tại
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        try {
+          await _storage.refFromURL(imageUrl).delete();
+        } catch (e) {
+          print('Lỗi xóa ảnh Storage: $e');
+        }
+      }
+      // 2. Xóa document trên Firestore
+      await _devicesRef.doc(deviceId).delete();
+    } catch (e) {
+      rethrow;
+    }
   }
 
   // --- REPAIR HISTORY METHODS ---
@@ -70,10 +82,10 @@ class FirebaseService {
   Stream<List<RepairHistory>> getHistoryStream(String deviceId) {
     return _historyRef
         .where('deviceId', isEqualTo: deviceId)
+        .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
-        // Truyền đầy đủ 2 tham số cho RepairHistory.fromMap
         return RepairHistory.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }).toList();
     });
@@ -82,10 +94,5 @@ class FirebaseService {
   /// Thêm bản ghi lịch sử sửa chữa
   Future<void> addRepairHistory(RepairHistory history) async {
     await _historyRef.add(history.toMap());
-  }
-
-  /// Xóa bản ghi lịch sử sửa chữa
-  Future<void> deleteRepairHistory(String id) async {
-    await _historyRef.doc(id).delete();
   }
 }

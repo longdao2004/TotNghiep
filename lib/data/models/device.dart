@@ -4,7 +4,7 @@ class Device {
   final String type;
   final DateTime purchaseDate;
   final int warrantyMonths;
-  final String? imageUrl;
+  final String? imageUrl; // Trường lưu link ảnh từ Firebase Storage
 
   Device({
     this.id,
@@ -22,7 +22,7 @@ class Device {
       'type': type,
       'purchaseDate': purchaseDate.toIso8601String(),
       'warrantyMonths': warrantyMonths,
-      'imageUrl': imageUrl,
+      'imageUrl': imageUrl, // Đảm bảo trường này được lưu lên Cloud
     };
   }
 
@@ -36,7 +36,7 @@ class Device {
           ? DateTime.parse(map['purchaseDate']) 
           : DateTime.now(),
       warrantyMonths: map['warrantyMonths'] ?? 0,
-      imageUrl: map['imageUrl'],
+      imageUrl: map['imageUrl'], // Lấy link ảnh từ Firestore về
     );
   }
 
