@@ -5,14 +5,20 @@ import 'data/models/device.dart';
 import 'data/models/repair_history.dart';
 import 'features/devices/device_list_screen.dart';
 import 'core/theme/app_theme.dart'; // Import theme
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Hive.initFlutter();
-  
+  // Khởi tạo Firebase bằng file cấu hình vừa sinh ra
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  /*
   Hive.registerAdapter(DeviceAdapter());
   Hive.registerAdapter(RepairHistoryAdapter());
+  */
 
   await Hive.openBox<Device>('deviceBox');
   await Hive.openBox<RepairHistory>('repairHistoryBox');
