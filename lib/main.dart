@@ -1,28 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'data/models/device.dart';
-import 'data/models/repair_history.dart';
 import 'features/devices/device_list_screen.dart';
-import 'core/theme/app_theme.dart'; // Import theme
+import 'core/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 void main() async {
+  // 1. Khởi tạo binding cho Flutter
   WidgetsFlutterBinding.ensureInitialized();
-  // Khởi tạo Firebase bằng file cấu hình vừa sinh ra
+
+  // 2. Khởi tạo Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  /*
-  Hive.registerAdapter(DeviceAdapter());
-  Hive.registerAdapter(RepairHistoryAdapter());
-  */
-
-  await Hive.openBox<Device>('deviceBox');
-  await Hive.openBox<RepairHistory>('repairHistoryBox');
-
+  // Khởi chạy ứng dụng với Riverpod
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -38,7 +30,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Quản lý thiết bị',
       debugShowCheckedModeBanner: false,
-      // Áp dụng Design System mới tại đây
       theme: AppTheme.lightTheme,
       home: const DeviceListScreen(),
     );

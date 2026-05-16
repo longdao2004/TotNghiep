@@ -1,12 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/custom_button.dart';
 import '../../data/models/device.dart';
-import 'device_list_screen.dart';
+import 'device_list_screen.dart'; // Để lấy firebaseServiceProvider
 
 class AddDeviceScreen extends ConsumerStatefulWidget {
   const AddDeviceScreen({super.key});
@@ -22,14 +24,10 @@ class _AddDeviceScreenState extends ConsumerState<AddDeviceScreen> {
 
   String selectedType = 'Laptop';
   DateTime selectedDate = DateTime.now();
+  File? _imageFile; // Biến lưu file ảnh đã chọn
   bool _isSaving = false;
 
-  final List<String> _deviceTypes = const [
-    'Laptop',
-    'Điện thoại',
-    'Tablet',
-    'Khác',
-  ];
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
@@ -38,63 +36,105 @@ class _AddDeviceScreenState extends ConsumerState<AddDeviceScreen> {
     super.dispose();
   }
 
-  Future<void> _selectPurchaseDate() async {
-    final pickedDate = await showDatePicker(
+  /// Hàm chọn ảnh từ Gallery hoặc Camera
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 1000,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi chọn ảnh: $e');
+    }
+  }
+
+  /// Hiển thị Dialog chọn nguồn ảnh
+  void _showPickImageDialog() {
+    showModalBottomSheet(
       context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Chụp ảnh mới'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
     );
-
-    if (pickedDate == null || !mounted) return;
-
-    setState(() {
-      selectedDate = pickedDate;
-    });
   }
 
   Future<void> _saveDevice() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isSaving = true;
-    });
-
-    final newDevice = Device(
-      id: const Uuid().v4(),
-      name: nameController.text.trim(),
-      type: selectedType,
-      purchaseDate: selectedDate,
-      warrantyMonths: int.parse(warrantyController.text.trim()),
-    );
+    setState(() => _isSaving = true);
 
     try {
-      await ref.read(databaseServiceProvider).addDevice(newDevice);
-      ref.read(deviceListProvider.notifier).refresh();
+      String? imageUrl;
+      final firebaseService = ref.read(firebaseServiceProvider);
+
+      // 1. Nếu có chọn ảnh, upload lên Firebase Storage trước
+      if (_imageFile != null) {
+        imageUrl = await firebaseService.uploadImage(_imageFile!);
+      }
+
+      // 2. Tạo object Device kèm link ảnh
+      final newDevice = Device(
+        name: nameController.text.trim(),
+        type: selectedType,
+        purchaseDate: selectedDate,
+        warrantyMonths: int.parse(warrantyController.text.trim()),
+        imageUrl: imageUrl,
+      );
+
+      // 3. Lưu thông tin vào Firestore
+      await firebaseService.addDevice(newDevice);
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã lưu thiết bị thành công')),
+        const SnackBar(content: Text('Đã lưu thiết bị thành công!')),
       );
       Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi khi lưu: $e')),
+      );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final dateText = DateFormat('dd/MM/yyyy').format(selectedDate);
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Thêm thiết bị mới'),
+        backgroundColor: AppColors.surface,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -103,88 +143,93 @@ class _AddDeviceScreenState extends ConsumerState<AddDeviceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Widget chọn và xem trước ảnh
+              Center(
+                child: GestureDetector(
+                  onTap: _showPickImageDialog,
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: _imageFile != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.file(_imageFile!, fit: BoxFit.cover),
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
+                              SizedBox(height: 8),
+                              Text('Thêm ảnh', style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
               TextFormField(
                 controller: nameController,
-                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'Tên máy',
-                  hintText: 'Ví dụ: Acer Nitro 5 AN515-45',
                   prefixIcon: Icon(Icons.devices),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Vui lòng nhập tên máy';
-                  }
-                  return null;
-                },
+                validator: (v) => v!.isEmpty ? 'Vui lòng nhập tên máy' : null,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Loại máy',
-                  prefixIcon: Icon(Icons.category_outlined),
+                  prefixIcon: Icon(Icons.category),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                 ),
-                items: _deviceTypes
-                    .map(
-                      (type) => DropdownMenuItem<String>(
-                        value: type,
-                        child: Text(type),
-                      ),
-                    )
+                items: ['Laptop', 'Điện thoại', 'Tablet', 'Khác']
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    selectedType = value;
-                  });
-                },
+                onChanged: (v) => setState(() => selectedType = v!),
               ),
               const SizedBox(height: 16),
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: _selectPurchaseDate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Ngày mua',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
-                    suffixIcon: Icon(Icons.expand_more),
-                  ),
-                  child: Text(dateText),
-                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Ngày mua'),
+                subtitle: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                  );
+                  if (date != null) setState(() => selectedDate = date);
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: warrantyController,
                 keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
-                  labelText: 'Bảo hành',
-                  hintText: 'Số tháng bảo hành',
-                  prefixIcon: Icon(Icons.verified_user_outlined),
-                  suffixText: 'tháng',
+                  labelText: 'Bảo hành (tháng)',
+                  prefixIcon: Icon(Icons.verified_user),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                 ),
-                validator: (value) {
-                  final text = value?.trim() ?? '';
-                  final warrantyMonths = int.tryParse(text);
-
-                  if (text.isEmpty) {
-                    return 'Vui lòng nhập thời gian bảo hành';
-                  }
-                  if (warrantyMonths == null || warrantyMonths < 0) {
-                    return 'Vui lòng nhập số hợp lệ';
-                  }
-                  return null;
-                },
+                validator: (v) => int.tryParse(v!) == null ? 'Nhập số hợp lệ' : null,
               ),
+              const SizedBox(height: 32),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: PrimaryButton(
-          text: _isSaving ? 'Đang lưu...' : 'Lưu thiết bị',
+          text: _isSaving ? 'Đang xử lý...' : 'Lưu thiết bị',
           onPressed: _isSaving ? null : _saveDevice,
         ),
       ),
